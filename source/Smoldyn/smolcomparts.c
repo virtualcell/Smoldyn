@@ -26,8 +26,7 @@
 	#include <sstream>
 	#include <iostream>
 
-	extern "C" {
-		#include "zlib.h" }
+	#include <zlib.h>  // has its own extern "C" guards
 #endif
 
 

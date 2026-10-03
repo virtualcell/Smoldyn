@@ -17,6 +17,12 @@ set(SRC_FILES
     Zn.c
     SFMT/SFMT.c)
 
+if(OPTION_VCELL)
+    # SimCommand.c includes smoldyn.h, which declares C++ classes under
+    # OPTION_VCELL. Only that file: the rest of libSteve stays C, and its headers
+    # carry extern "C" guards so C++ callers link against it.
+    set_source_files_properties(SimCommand.c PROPERTIES LANGUAGE CXX)
+endif()
 add_library(Steve OBJECT ${SRC_FILES})
 set_target_properties(Steve PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

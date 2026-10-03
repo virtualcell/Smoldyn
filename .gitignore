@@ -10,3 +10,7 @@ htmlcov/
 .idea/
 build-install.sh
 run.sh
+
+# Python extension module built in-tree by source/python/CMakeLists.txt
+source/python/smoldyn/_smoldyn*.so
+source/python/smoldyn/_smoldyn*.pyd

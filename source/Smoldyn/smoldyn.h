@@ -43,6 +43,7 @@
 
 #ifdef OPTION_VCELL
 #include <string>
+#include <sstream>  // std::stringstream, used by VCell rate parsing
 typedef struct VolumeSamples* VolumeSamplesPtr;
 class AbstractMesh;
 class ValueProvider;

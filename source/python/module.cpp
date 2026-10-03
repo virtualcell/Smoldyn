@@ -16,6 +16,10 @@ using namespace std;
 
 #include "../Smoldyn/smoldynfuncs.h"
 #include "../libSteve/SimCommand.h"
+#ifdef OPTION_VCELL
+#include "../vcell/SimpleMesh.h"
+#include "../vcell/SimpleValueProvider.h"
+#endif
 #include "CallbackFunc.h"
 #include "Simulation.h"
 #include "module.h"

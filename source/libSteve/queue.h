@@ -7,6 +7,10 @@ of the Gnu Lesser General Public License (LGPL). */
 #define __queue_h
 
 #include <limits.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 #if !defined(LLONG_MAX) || defined(WIN32)
 	typedef long int Q_LONGLONG;
 	#define Q_LLONG_MAX LONG_MAX
@@ -49,6 +53,10 @@ int q_pop(q_queue q,void **kvptr,int *kiptr,double *kdptr,Q_LONGLONG *klptr,void
 int q_length(q_queue q);
 int q_maxlength(q_queue q);
 int q_next(int i,void **kvptr,int *kiptr,double *kdptr,Q_LONGLONG *klptr,void **xptr,q_queue q);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

@@ -72,6 +72,12 @@ if (OPTION_VCELL)
   set(OPTION_USE_LIBTIFF OFF)
   set(OPTION_USE_ZLIB OFF)
   set(HAVE_ZLIB TRUE)
+  # smolcomparts.c inflates VCell's compressed volume samples with zlib. Prefer
+  # the system zlib over the Windows-era zlib.h/zconf.h in source/vcell, which
+  # do not compile on modern toolchains.
+  find_package(ZLIB REQUIRED)
+  include_directories(BEFORE ${ZLIB_INCLUDE_DIRS})
+  list(APPEND DEP_LIBS ZLIB::ZLIB)
 endif ()
 
 if (OPTION_PYTHON)
@@ -168,6 +174,11 @@ if(OPTION_VCELL)
         ${CMAKE_SOURCE_DIR}/source/vcell/SimpleMesh.cpp
         ${CMAKE_SOURCE_DIR}/source/vcell/SimpleValueProvider.cpp )
   include_directories(source/vcell)
+  # With OPTION_VCELL, smoldyn.h declares C++ classes (ValueProvider,
+  # AbstractMesh, ...), so every Smoldyn source must be compiled as C++, as in
+  # VCell's vendored Smoldyn. Source-file properties are directory-scoped;
+  # source/python/CMakeLists.txt repeats this for its own copy of SRC_FILES.
+  set_source_files_properties(${SRC_FILES} ${MAIN_FILES} PROPERTIES LANGUAGE CXX)
 endif(OPTION_VCELL)
 
 if(OPTION_TARGET_LIBSMOLDYN)
@@ -190,6 +201,11 @@ set(VCELL_BUILD OFF)
 set(APPLE_BUILD OFF)
 set(NIX_BUILD OFF)
 set(WINDOWS_BUILD OFF)
+
+# Default BioNetGen path; the platform branches below may override it. The
+# OPTION_VCELL branch replaces the platform branches, so without this default
+# BNG2_PATH is undefined and smolbng.c fails to compile.
+set(BNG2_PATH "/usr/local/bin/BioNetGen/BNG2.pl")
 
 if (OPTION_VCELL)
   set(VCELL_BUILD ON)

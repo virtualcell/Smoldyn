@@ -6,6 +6,10 @@ of the Gnu Lesser General Public License (LGPL). */
 #ifndef __gnuPipe_h__
 #define __gnuPipe_h__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // File functions
 FILE *gnuWindow();
 void gnuClose(FILE *gnu);
@@ -21,5 +25,9 @@ void gnuSetScales(FILE *gnu,double xa,double xb,double ya,double yb);
 void gnuData(FILE *gnu,double *x,double *y,int m,int col);
 void gnuData2(FILE *gnu,double *x,double *y,int *ct,int col);
 void gnuData3(FILE *gnu,double *x,double **y,int rows,int cols);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

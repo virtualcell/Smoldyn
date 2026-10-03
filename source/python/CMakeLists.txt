@@ -3,6 +3,10 @@
 # find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module Development.Embed VERSION 3.8.15...3.12)
 
 # recompile libsmoldyn for PYTHON.
+if(OPTION_VCELL)
+    # smoldyn.h declares C++ classes under OPTION_VCELL (see top-level CMakeLists.txt).
+    set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX)
+endif()
 add_library(_pysmoldyn STATIC ${SRC_FILES}
     $<TARGET_OBJECTS:Steve>
     $<TARGET_OBJECTS:nsv>)

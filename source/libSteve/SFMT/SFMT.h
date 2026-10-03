@@ -43,6 +43,10 @@
 	#endif
 #else
   #include <inttypes.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
   #if defined(__GNUC__)
     #define inline __inline__
   #endif
@@ -156,4 +160,8 @@ inline static double genrand_res53_mix(void)
     y = gen_rand32();
     return to_res53_mix(x, y);
 } 
+#ifdef __cplusplus
+}
+#endif
+
 #endif

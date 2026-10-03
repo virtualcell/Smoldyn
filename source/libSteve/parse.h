@@ -6,6 +6,10 @@ of the Gnu Lesser General Public License (LGPL). */
 #ifndef __parse_h
 #define __parse_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct ParseFileStruct {
 	char *froot;								// root of file name
 	char *fname;								// complete file name, including root
@@ -27,5 +31,9 @@ int Parse_CmdLineArg(int *argcptr,char **argv,ParseFilePtr pfp);
 ParseFilePtr Parse_Start(const char *fileroot,const char *filename,char *erstr);
 int Parse_ReadLine(ParseFilePtr *pfpptr,char *word,char **line2ptr,char *erstr);
 int Parse_ReadFailure(ParseFilePtr pfp,char *erstr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -8,6 +8,10 @@ for documentation. */
 #ifndef __rxn2Dparam_h
 #define __rxn2Dparam_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 double rxn2Dactrate(double step,double sigmab);
 
@@ -17,5 +21,9 @@ double rdf2Dabsorbprob(double *r,double *rdf,int n,double prob);
 void rdf2Ddiffuse(double *r,double *rdfa,double *rdfd,int n,double step);
 void rdf2Dreverserxn(double *r,double *rdf,int n,double step,double b,double flux);
 double rdf2Dsteadystate(double *r,double *rdfa,double *rdfd,int n,double step,double b,double eps);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
