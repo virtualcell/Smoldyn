@@ -2923,17 +2923,36 @@ int zeroreact(simptr sim) {
 				mesh->getDeltaXYZ(delta);
 				int n[3];
 				mesh->getNumXYZ(n);
-				double meshv = delta[0]*delta[1]*delta[2];
 				int totalNumMesh = n[0]*n[1]*n[2];
 
 				for(i=0; i<totalNumMesh; i++) {
 					int volIndex = i;
 					double centerPos[3];
 					mesh->getCenterCoordinates(volIndex, centerPos);
-					if (posincompart(sim, centerPos, rxn->cmpt,0)) {
+					// Boundary nodes sit exactly on the domain walls, where posincompart is
+					// ambiguous (they were excluded, so boundary cells never produced).
+					// Test membership at the centre nudged just inside the domain.
+					double testPos[3] = { centerPos[0], centerPos[1], centerPos[2] };
+					for(int d = 0; d < sim->dim; d++) {
+						double lo = sim->wlist[2*d]->pos, hi = sim->wlist[2*d+1]->pos;
+						double eps = 1e-9 * (hi - lo);
+						testPos[d] = fmin(fmax(testPos[d], lo + eps), hi - eps);
+					}
+					if (posincompart(sim, testPos, rxn->cmpt,0)) {
 					   // go through each mesh elements to see if it is in the compartments that the reaction happens
 						double rate =  evaluateVolRnxRate(sim, rxn, centerPos);
-						double prob = rate * sim->dt * meshv;
+						// Use the node's cell clipped to the domain (half/quarter/eighth cells on
+						// the boundary), the same region randomPosInMesh places molecules in. The
+						// full cell volume meshv overproduces at boundary nodes.
+						double cellv = 1.0;
+						for(int d = 0; d < sim->dim; d++) {
+							double lo = sim->wlist[2*d]->pos, hi = sim->wlist[2*d+1]->pos;
+							double a = fmax(lo, centerPos[d] - 0.5*delta[d]);
+							double b = fmin(hi, centerPos[d] + 0.5*delta[d]);
+							cellv *= (b > a) ? (b - a) : 0.0;
+						}
+						for(int d = sim->dim; d < 3; d++) cellv *= delta[d];
+						double prob = rate * sim->dt * cellv;
 						nmol=poisrandD(prob);
 						int count = 0;
 						//put generated molecules in the same mesh
