@@ -15,18 +15,30 @@ using std::string;
 #include <algorithm>
 using namespace std;
 
+/* Positions hold sim->dim coordinates; pad to 3 so 1D/2D models never read past them. */
+static void pad3(simptr sim, const double* pos, double* p3) {
+	p3[0] = p3[1] = p3[2] = 0;
+	for (int d = 0; d < sim->dim && d < 3; d++) p3[d] = pos[d];
+}
+
 double evaluateVolRnxRate(simptr sim, rxnptr reaction,  double* pos){
-	return reaction->rateValueProvider->getValue(sim->time, pos[0], pos[1], pos[2], reaction);
+	double p[3];
+	pad3(sim, pos, p);
+	return reaction->rateValueProvider->getValue(sim->time, p[0], p[1], p[2], reaction);
 }
 
 double evaluateMemRnxRate(simptr sim, rxnptr reaction, double* pos, char* panelName)
 {
-	return reaction->rateValueProvider->getValue(sim->time, pos[0], pos[1], pos[2], reaction, panelName);
+	double p[3];
+	pad3(sim, pos, p);
+	return reaction->rateValueProvider->getValue(sim->time, p[0], p[1], p[2], reaction, panelName);
 }
 
 double evaluateSurfActionRate(simptr sim, surfactionptr actdetails, MolecState ms, double* pos, char* panelName)
 {
-	return actdetails->srfRateValueProvider[ms]->getValue(sim->time, pos[0], pos[1], pos[2], actdetails, panelName);
+	double p[3];
+	pad3(sim, pos, p);
+	return actdetails->srfRateValueProvider[ms]->getValue(sim->time, p[0], p[1], p[2], actdetails, panelName);
 }
 
 

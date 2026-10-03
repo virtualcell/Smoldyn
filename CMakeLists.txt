@@ -172,7 +172,8 @@ if(OPTION_VCELL)
   list(APPEND SRC_FILES
         ${CMAKE_SOURCE_DIR}/source/Smoldyn/smoldynhybrid.c
         ${CMAKE_SOURCE_DIR}/source/vcell/SimpleMesh.cpp
-        ${CMAKE_SOURCE_DIR}/source/vcell/SimpleValueProvider.cpp )
+        ${CMAKE_SOURCE_DIR}/source/vcell/SimpleValueProvider.cpp
+        ${CMAKE_SOURCE_DIR}/source/vcell/GridValueProvider.cpp )
   include_directories(source/vcell)
   # With OPTION_VCELL, smoldyn.h declares C++ classes (ValueProvider,
   # AbstractMesh, ...), so every Smoldyn source must be compiled as C++, as in

@@ -978,7 +978,11 @@ int loadcompart(simptr sim,ParseFilePtr *pfpptr,char *line2) {
 /* compartsupdateparams */
 int compartsupdateparams(simptr sim) {
 #ifdef OPTION_VCELL
-	return compartsupdateparams_volumeSample(sim);
+	// VCell models define compartments by a voxel map (highResVolumeSamples);
+	// otherwise fall back to Smoldyn's geometric compartments, as posincompart does.
+	if(sim->volumeSamplesPtr)
+		return compartsupdateparams_volumeSample(sim);
+	return compartsupdateparams_original(sim);
 #else
 	return compartsupdateparams_original(sim);
 #endif

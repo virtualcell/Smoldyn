@@ -13,6 +13,7 @@
 using namespace std;
 
 #include "../Smoldyn/libsmoldyn.h"
+#include "../vcell/HybridGrid.h"
 #include "../libSteve/opengl2.h"
 
 #include "Command.h"
@@ -37,6 +38,12 @@ class Simulation
 
     // Factory function.
     Simulation(const char* filepath, const char* flags);
+#ifdef OPTION_VCELL
+    // Load a configuration file whose position-dependent rates ('k*B;') read
+    // fields from `grid` (see source/vcell/GridValueProvider.h).
+    Simulation(const char* filepath, const char* flags, std::shared_ptr<HybridGrid> grid);
+    std::shared_ptr<HybridGrid> getHybridGrid() const { return grid_; }
+#endif
 
     ~Simulation();
 
@@ -98,6 +105,7 @@ class Simulation
     double curtime_;
     bool initDisplay_;
     bool debug_;
+    std::shared_ptr<HybridGrid> grid_; // hybrid rate fields (OPTION_VCELL only)
 
     vector<std::unique_ptr<Command>> commands_;
 };

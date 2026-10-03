@@ -15,6 +15,10 @@
 // simfree (used as custom delete in shared_ptr is declared here.
 //
 #include "../Smoldyn/smoldynfuncs.h"
+#ifdef OPTION_VCELL
+#include "../vcell/GridValueProvider.h"
+#endif
+#include <stdexcept>
 
 using namespace std;
 
@@ -66,6 +70,36 @@ Simulation::Simulation(const char* filepath, const char* flags)
     //
     cerr << __FUNCTION__ << ":: Fatal error: failed to initialize Simulation." << endl;
 }
+
+#ifdef OPTION_VCELL
+Simulation::Simulation(const char* filepath, const char* flags, std::shared_ptr<HybridGrid> grid)
+  : sim_(nullptr)
+  , curtime_(0.0)
+  , initDisplay_(false)
+  , debug_(false)
+  , grid_(grid)
+{
+    if (!grid)
+        throw std::invalid_argument("Simulation: grid must not be None");
+    auto path = splitPath(string(filepath));
+    simptr sim = nullptr;
+    // The factory and mesh are owned by the simulation for its lifetime (Smoldyn
+    // does not free them; like VCell, we accept that small one-off leak).
+    int er = simInitAndLoad(path.first.c_str(),
+      path.second.c_str(),
+      &sim,
+      flags,
+      new GridValueProviderFactory(grid),
+      new GridMesh(grid));
+    if (er || !sim)
+        throw std::runtime_error(string("Simulation: failed to load hybrid model '") + filepath + "'");
+    if (simUpdateAndDisplay(sim)) {
+        simfree(sim);
+        throw std::runtime_error(string("Simulation: failed to update hybrid model '") + filepath + "'");
+    }
+    sim_.reset(sim, simfree);
+}
+#endif
 
 Simulation::~Simulation() {}
 

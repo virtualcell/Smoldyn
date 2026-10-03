@@ -26,6 +26,7 @@ using namespace std;
 #include "pybind11/functional.h"
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
+#include "pybind11/numpy.h"
 #include "pybind11/stl_bind.h"
 
 using namespace pybind11::literals; // for _a
@@ -81,6 +82,79 @@ getRandomSeed(Simulation& sim)
  * @Param wflag If 1, overwrite exsiting files.
  *
  */
+
+/* ----------------------------------------------------------------------------*/
+/*  Hybrid PDE/particle coupling helpers (HybridGrid, numpy molecule access).   */
+/* ----------------------------------------------------------------------------*/
+namespace {
+
+// Species index for `species`, or -1 for "all".
+int speciesIdentOrAll(simptr sim, const string& species)
+{
+    if (species == "all")
+        return -1;
+    int i = smolGetSpeciesIndexNT(sim, species.c_str());
+    if (i <= 0)
+        throw py::value_error("unknown species '" + species + "'");
+    return i;
+}
+
+// Visit every live molecule in the system lists matching species and state.
+template <class F>
+void forEachMolecule(simptr sim, int ident, MolecState ms, F visit)
+{
+    if (!sim || !sim->mols)
+        return;
+    for (int ll = 0; ll < sim->mols->nlist; ll++) {
+        if (sim->mols->listtype[ll] != MLTsystem)
+            continue;
+        for (int m = 0; m < sim->mols->nl[ll]; m++) {
+            moleculeptr mptr = sim->mols->live[ll][m];
+            if (mptr->ident == 0 || (ident >= 0 && mptr->ident != ident))
+                continue;
+            if (ms != MSall && mptr->mstate != ms)
+                continue;
+            visit(mptr);
+        }
+    }
+}
+
+// Shape (Nz, Ny, Nx) restricted to the grid's dimensions: C order == VCell order.
+vector<py::ssize_t> gridShape(const HybridGrid& g)
+{
+    vector<py::ssize_t> shape;
+    for (int d = g.dim() - 1; d >= 0; d--)
+        shape.push_back(g.num()[d]);
+    return shape;
+}
+
+std::shared_ptr<HybridGrid> makeGrid(const vector<double>& origin,
+  const vector<double>& size,
+  const vector<int>& num)
+{
+    if (origin.size() != size.size() || origin.size() != num.size())
+        throw py::value_error("HybridGrid: origin, size and num must have the same length");
+    return std::make_shared<HybridGrid>((int)origin.size(), origin.data(), size.data(), num.data());
+}
+
+py::array_t<long long> moleculeHistogram(simptr sim, const string& species, const HybridGrid& grid, MolecState ms)
+{
+    if (sim->dim != grid.dim())
+        throw py::value_error("getMoleculeHistogram: grid dimension does not match the simulation");
+    py::array_t<long long> counts(gridShape(grid));
+    long long* data = counts.mutable_data();
+    std::fill(data, data + grid.numElements(), 0LL);
+    forEachMolecule(sim, speciesIdentOrAll(sim, species), ms, [&](moleculeptr mptr) {
+        double pos[3] = { 0, 0, 0 };
+        for (int d = 0; d < sim->dim; d++)
+            pos[d] = mptr->pos[d];
+        data[grid.index(pos)]++;
+    });
+    return counts;
+}
+
+} // namespace
+
 /* ----------------------------------------------------------------------------*/
 int
 init_and_run(const string& filepath,
@@ -390,9 +464,85 @@ PYBIND11_MODULE(_smoldyn, m)
      * friendly error messages and an object-oriented design. It is possible to
      * build a complete smoldyn model using this module only.
      */
+    /* Cartesian grid carrying fields for position-dependent (hybrid) rates and
+     * the target of getMoleculeHistogram. Geometry follows VCell's CartesianMesh:
+     * nodes at origin + i*size/(num-1); arrays are shaped (Nz, Ny, Nx), x fastest.
+     */
+    py::class_<HybridGrid, std::shared_ptr<HybridGrid>>(m, "HybridGrid")
+      .def(py::init(&makeGrid), "origin"_a, "size"_a, "num"_a)
+      .def_property_readonly("dim", &HybridGrid::dim)
+      .def_property_readonly("num",
+        [](const HybridGrid& g) { return vector<int>(g.num(), g.num() + g.dim()); })
+      .def_property_readonly("origin",
+        [](const HybridGrid& g) { return vector<double>(g.origin(), g.origin() + g.dim()); })
+      .def_property_readonly("size",
+        [](const HybridGrid& g) { return vector<double>(g.size(), g.size() + g.dim()); })
+      .def_property_readonly("spacing",
+        [](const HybridGrid& g) { return vector<double>(g.scale(), g.scale() + g.dim()); })
+      .def_property_readonly("shape", &gridShape)
+      .def("numElements", &HybridGrid::numElements)
+      .def("index",
+        [](const HybridGrid& g, const vector<double>& pos) {
+            double p[3] = { 0, 0, 0 };
+            for (size_t d = 0; d < pos.size() && d < 3; d++)
+                p[d] = pos[d];
+            return g.index(p);
+        })
+      .def("center",
+        [](const HybridGrid& g, long idx) {
+            if (idx < 0 || idx >= g.numElements())
+                throw py::index_error("HybridGrid.center: index out of range");
+            double c[3];
+            g.center(idx, c);
+            return vector<double>(c, c + g.dim());
+        })
+      .def("setField",
+        [](HybridGrid& g,
+          const string& name,
+          py::array_t<double, py::array::c_style | py::array::forcecast> values) {
+            g.setField(name, values.data(), (long)values.size());
+        },
+        "name"_a, "values"_a)
+      .def("getField",
+        [](const HybridGrid& g, const string& name) {
+            const std::vector<double>* f = g.field(name);
+            if (!f || f->empty())
+                throw py::key_error("HybridGrid: field '" + name + "' is not set");
+            py::array_t<double> out(gridShape(g));
+            std::copy(f->begin(), f->end(), out.mutable_data());
+            return out;
+        })
+      .def("fieldNames", &HybridGrid::fieldNames)
+      .def("requiredFields", &HybridGrid::requiredFields);
+
     py::class_<Simulation>(m, "Simulation")
       .def(py::init<vector<double>&, vector<double>&, vector<string>&>())
       .def(py::init<const char*, const char*>())
+#ifdef OPTION_VCELL
+      .def(py::init<const char*, const char*, std::shared_ptr<HybridGrid>>(),
+        "filepath"_a, "flags"_a, "grid"_a)
+      .def("getHybridGrid", &Simulation::getHybridGrid)
+#endif
+
+      // Numpy access to molecules (hybrid coupling).
+      .def("getMoleculePositions",
+        [](Simulation& sim, const string& species, MolecState state) {
+            simptr s = sim.getSimPtr();
+            int ident = speciesIdentOrAll(s, species);
+            vector<double> flat;
+            forEachMolecule(s, ident, state, [&](moleculeptr mptr) {
+                flat.insert(flat.end(), mptr->pos, mptr->pos + s->dim);
+            });
+            py::array_t<double> out({ (py::ssize_t)(flat.size() / s->dim), (py::ssize_t)s->dim });
+            std::copy(flat.begin(), flat.end(), out.mutable_data());
+            return out;
+        },
+        "species"_a = "all", "state"_a = MSall)
+      .def("getMoleculeHistogram",
+        [](Simulation& sim, const string& species, const HybridGrid& grid, MolecState state) {
+            return moleculeHistogram(sim.getSimPtr(), species, grid, state);
+        },
+        "species"_a, "grid"_a, "state"_a = MSall)
 
       // Connect a python callback function.
       .def("connect", &Simulation::connect)
