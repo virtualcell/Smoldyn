@@ -2929,16 +2929,13 @@ int zeroreact(simptr sim) {
 					int volIndex = i;
 					double centerPos[3];
 					mesh->getCenterCoordinates(volIndex, centerPos);
-					// Boundary nodes sit exactly on the domain walls, where posincompart is
-					// ambiguous (they were excluded, so boundary cells never produced).
-					// Test membership at the centre nudged just inside the domain.
-					double testPos[3] = { centerPos[0], centerPos[1], centerPos[2] };
-					for(int d = 0; d < sim->dim; d++) {
-						double lo = sim->wlist[2*d]->pos, hi = sim->wlist[2*d+1]->pos;
-						double eps = 1e-9 * (hi - lo);
-						testPos[d] = fmin(fmax(testPos[d], lo + eps), hi - eps);
-					}
-					if (posincompart(sim, testPos, rxn->cmpt,0)) {
+					// Every cell draws Poisson(rate·dt·cellv) molecules uniformly in the cell, and the
+					// posincompart test below keeps only those inside the compartment. That thinning
+					// makes the count exactly Poisson(rate·dt·|cell ∩ compartment|). Testing only the
+					// cell centre (as VCell does) skips cells whose centre is outside but that partly
+					// overlap the compartment, and creation then falls short at curved membranes
+					// (about 2.4% for a ball with R = 16 cells).
+					{
 					   // go through each mesh elements to see if it is in the compartments that the reaction happens
 						double rate =  evaluateVolRnxRate(sim, rxn, centerPos);
 						// Use the node's cell clipped to the domain (half/quarter/eighth cells on
