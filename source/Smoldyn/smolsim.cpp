@@ -2309,7 +2309,10 @@ int loadsim(simptr sim,const char *fileroot,const char *filename,const char *fla
 		else if(!strcmp(word,"start_jms")) {			// jms settings
 			er=loadJMS(sim,&pfp,line2, errstring);
 		}
-
+#endif
+#if defined(VCELL) || defined(OPTION_VCELL)
+		// The compartment voxel map is compiled with OPTION_VCELL (smolcomparts.c), so accept
+		// it in OPTION_VCELL builds too, not only in VCell's own (VCELL) build.
 		else if(!strcmp(word,"start_highResVolumeSamples")) {			//highResVolumeSamplesFile
 			er=loadHighResVolumeSamples(sim,&pfp,line2); }
 #endif
