@@ -1,0 +1,141 @@
+# Smoldyn's Python module built with OPTION_VCELL (the hybrid ValueProvider hooks of this branch), as a wheel for
+# compose-api's composed environments: biosimulations/compose-api, docs/plan-environment-composition.md, 7c-3. Its
+# entry installs the wheel from the release this workflow makes, `vcell-pyhybrid-<short commit>`, by URL and sha256.
+#
+# Built like viva-pde-particle's scripts/build_smoldyn.sh, on conda-forge's Python 3.12 in the pixi image compose-api
+# locks and builds with (pinned by digest below): manylinux's Pythons have no libpython, which this CMake build needs.
+# The module therefore links libpython, as libroadrunner's does; compose-api's images put the environment's lib on
+# LD_LIBRARY_PATH. CPython 3.12 on Linux x86-64 only: what compose-api's environments run.
+#
+# A pull request to pyhybrid builds the wheel as a check. To publish, run it by hand with a commit and `release`.
+name: VCell hybrid wheel
+
+on:
+  pull_request:
+    branches: [pyhybrid]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: The full commit to build
+        required: true
+      release:
+        description: Attach the wheel to the release vcell-pyhybrid-<short commit>, made at that commit
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    container: ghcr.io/prefix-dev/pixi@sha256:17e1043a38e45b12db5c5339815de0d8973886fd76c922d705d823e146fff4d8
+    defaults:
+      run:
+        shell: bash  # a container job's steps run in sh otherwise, which has no ${var:0:7}
+    outputs:
+      wheel: ${{ steps.wheel.outputs.wheel }}
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Git, for the checkout
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }}
+          path: src
+      - id: source
+        name: The commit and the version it builds
+        working-directory: src
+        run: |
+          commit=$(git rev-parse HEAD)
+          base=$(sed -n 's/.*set(SMOLDYN_VERSION "\([0-9.]*\)\.dev.*/\1/p' CMakeLists.txt)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=${base}.dev0+vcell.${commit:0:7}" >> "$GITHUB_OUTPUT"
+      - name: The build environment
+        run: |
+          mkdir -p build-env && cd build-env
+          cat > pixi.toml <<'TOML'
+          [workspace]
+          name = "smoldyn-vcell-wheel"
+          channels = ["conda-forge"]
+          platforms = ["linux-64"]
+
+          [dependencies]
+          python = "3.12.*"
+          cmake = ">=3.20"
+          ninja = "*"
+          cxx-compiler = "*"
+          c-compiler = "*"
+          zlib = "*"
+          setuptools = "*"
+          wheel = "*"
+          pip = "*"
+          TOML
+          pixi install
+      - id: wheel
+        name: Build the wheel
+        env:
+          SMOLDYN_VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          pixi run --manifest-path build-env/pixi.toml bash -euxo pipefail -c '
+            PY=$(command -v python)
+            # the conda compilers name their binutils with the target prefix; CMake does not find them unprompted
+            cmake -S src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DOPTION_VCELL=ON -DOPTION_PYTHON=ON -DOPTION_TARGET_SMOLDYN=ON -DOPTION_TARGET_LIBSMOLDYN=ON \
+              -DOPTION_USE_OPENGL=OFF -DOPTION_USE_LIBTIFF=OFF -DOPTION_NSV=ON -DOPTION_EXAMPLES=OFF -DOPTION_DOCS=OFF \
+              -DPython3_EXECUTABLE="$PY" -DSMOLDYN_VERSION="$SMOLDYN_VERSION" \
+              -DCMAKE_AR="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-ar" \
+              -DCMAKE_RANLIB="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-ranlib"
+            cmake --build build --parallel
+            mkdir -p dist
+            (cd build/py && "$PY" -m pip wheel --no-deps --no-build-isolation -w "$GITHUB_WORKSPACE/dist" .)
+            # the staged setup.py tags it py3-none-any; it holds a CPython 3.12 x86-64 extension
+            "$PY" -m wheel tags --remove --python-tag cp312 --abi-tag cp312 --platform-tag linux_x86_64 dist/*.whl
+            "$PY" - <<PYCHECK
+          import sys, zipfile, glob
+          [whl] = glob.glob("dist/*.whl")
+          names = zipfile.ZipFile(whl).namelist()
+          assert any(n.startswith("smoldyn/_smoldyn.cpython-312-x86_64-linux-gnu") for n in names), names
+          PYCHECK
+          '
+          cd dist
+          wheel=$(ls *.whl)
+          sha256sum "$wheel" | tee "$wheel.sha256"
+          echo "wheel=$wheel" >> "$GITHUB_OUTPUT"
+      - name: Import it
+        run: |
+          pixi run --manifest-path build-env/pixi.toml bash -euxo pipefail -c '
+            python -m pip install --no-deps dist/*.whl
+            cd /tmp && LD_LIBRARY_PATH="$CONDA_PREFIX/lib" python -c "import smoldyn; print(smoldyn.__version__)"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
+    needs: wheel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist
+      - name: Attach it to vcell-pyhybrid-<short commit>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.wheel.outputs.commit }}
+        run: |
+          tag="vcell-pyhybrid-${COMMIT:0:7}"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" dist/* -R "$GITHUB_REPOSITORY" --target "$COMMIT" \
+              --title "Smoldyn with OPTION_VCELL, ${COMMIT:0:7} (CPython 3.12, Linux x86-64)" \
+              --notes "Built by .github/workflows/vcell-hybrid-wheel.yml from ${COMMIT} for compose-api's composed environments (biosimulations/compose-api, docs/plan-environment-composition.md, 7c-3). The .sha256 file is the hash its registry entry installs it by."
+          fi
