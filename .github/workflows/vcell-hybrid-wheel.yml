@@ -30,6 +30,9 @@ jobs:
   wheel:
     runs-on: ubuntu-latest
     container: ghcr.io/prefix-dev/pixi@sha256:17e1043a38e45b12db5c5339815de0d8973886fd76c922d705d823e146fff4d8
+    defaults:
+      run:
+        shell: bash  # a container job's steps run in sh otherwise, which has no ${var:0:7}
     outputs:
       wheel: ${{ steps.wheel.outputs.wheel }}
       commit: ${{ steps.source.outputs.commit }}
